@@ -819,11 +819,22 @@ async function loadEvents() {
 function filterAndRenderEvents() {
     if (!userPosition) return;
 
+    // 先给所有事件计算距离
+    allEvents.forEach(event => {
+        if (event.lat != null && event.lng != null && userPosition.lat != null && userPosition.lng != null) {
+            event._distance = getDistance(userPosition.lat, userPosition.lng, event.lat, event.lng);
+        } else {
+            event._distance = null;
+        }
+    });
+
     const filtered = allEvents.filter(event => {
-        const d = getDistance(userPosition.lat, userPosition.lng, event.lat, event.lng);
-        event._distance = d;
-        return d <= currentRadius;
-    }).sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+        return event._distance !== null && event._distance <= currentRadius;
+    }).sort((a, b) => {
+        // 按距离升序，距离相同按时间降序
+        if (a._distance !== b._distance) return a._distance - b._distance;
+        return new Date(b.created_at) - new Date(a.created_at);
+    });
 
     renderFeed(filtered);
     addEventMarkers(filtered);
@@ -840,7 +851,16 @@ function renderFeed(events) {
     feed.innerHTML = events.map(event => {
         const cfg = TYPE_CONFIG[event.type] || TYPE_CONFIG.safety;
         const timeStr = formatTime(event.created_at);
-        const distStr = event._distance ? event._distance.toFixed(1) + 'km' : '未知距离';
+        let distStr;
+        if (event._distance !== null && event._distance !== undefined && !isNaN(event._distance)) {
+            if (event._distance < 1) {
+                distStr = (event._distance * 1000).toFixed(0) + 'm';
+            } else {
+                distStr = event._distance.toFixed(1) + 'km';
+            }
+        } else {
+            distStr = '距离未知';
+        }
         const imgList = safeImages(event.images);
         const imagesHtml = imgList.length > 0 
             ? `<div class="card-images">${imgList.slice(0,3).map(url => `<img class="card-img-thumb" src="${url}" loading="lazy">`).join('')}</div>` 
@@ -872,7 +892,16 @@ function openDetailById(id) {
 function openDetail(event) {
     const cfg = TYPE_CONFIG[event.type] || TYPE_CONFIG.safety;
     const timeStr = formatTime(event.created_at);
-    const distStr = event._distance ? event._distance.toFixed(1) + 'km' : '未知距离';
+    let distStr;
+        if (event._distance !== null && event._distance !== undefined && !isNaN(event._distance)) {
+            if (event._distance < 1) {
+                distStr = (event._distance * 1000).toFixed(0) + 'm';
+            } else {
+                distStr = event._distance.toFixed(1) + 'km';
+            }
+        } else {
+            distStr = '距离未知';
+        }
 
     const imgList = safeImages(event.images);
     const imagesHtml = imgList.length > 0
@@ -918,6 +947,9 @@ function openDetail(event) {
 
     document.getElementById('detailModal').classList.add('active');
 
+    // 加载评论
+    loadComments(event.id);
+
     // 增加浏览量
     supabase.from('events').update({ view_count: (event.view_count || 0) + 1 }).eq('id', event.id).then();
 }
@@ -929,6 +961,75 @@ function closeDetailModal() {
 function navigateTo(lat, lng) {
     window.open(`https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`);
 }
+async function loadComments(eventId) {
+    const listEl = document.getElementById(`commentsList-${eventId}`);
+    if (!listEl) return;
+
+    const { data, error } = await supabase
+        .from('comments')
+        .select('*')
+        .eq('event_id', eventId)
+        .order('created_at', { ascending: true });
+
+    if (error || !data || data.length === 0) {
+        listEl.innerHTML = '<div style="text-align:center;padding:16px;color:#a0aec0;font-size:13px;">暂无评论，来说两句吧~</div>';
+        return;
+    }
+
+    listEl.innerHTML = data.map(c => `
+        <div class="comment" style="margin-bottom:14px;">
+            <div class="comment-avatar normal" style="background:linear-gradient(135deg, #667eea, #764ba2);color:white;font-weight:700;">
+                ${(c.profiles?.nickname || '用户').charAt(0)}
+            </div>
+            <div style="flex:1;">
+                <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
+                    <span class="comment-name">${escapeHtml(c.profiles?.nickname || '匿名用户')}</span>
+                    <span class="comment-time">${formatTime(c.created_at)}</span>
+                </div>
+                <div class="comment-text">${escapeHtml(c.content)}</div>
+            </div>
+        </div>
+    `).join('');
+}
+
+async function submitComment(eventId) {
+    const input = document.getElementById(`commentInput-${eventId}`);
+    const content = input.value.trim();
+    if (!content) return;
+
+    const user = await getUser();
+    if (!user) {
+        showToast('请先登录再评论', 'error');
+        openAuthModal();
+        return;
+    }
+
+    const btn = input.nextElementSibling;
+    btn.disabled = true; btn.textContent = '发送中...';
+
+    const { error } = await supabase.from('comments').insert({
+        event_id: eventId,
+        user_id: user.id,
+        content: content
+    });
+
+    btn.disabled = false; btn.textContent = '发送';
+
+    if (error) {
+        showToast('评论失败: ' + error.message, 'error');
+        return;
+    }
+
+    input.value = '';
+    showToast('评论成功！', 'success');
+    loadComments(eventId);
+
+    // 更新评论数
+    await supabase.from('events').update({ 
+        comment_count: (allEvents.find(e => e.id === eventId)?.comment_count || 0) + 1 
+    }).eq('id', eventId);
+}
+
 
 function shareEvent(id) {
     const url = window.location.href + '?event=' + id;
@@ -941,32 +1042,52 @@ function shareEvent(id) {
 }
 
 function onRangeChange() {
-    currentRadius = parseInt(document.getElementById('rangeSelect').value);
-    const displayText = currentRadius >= 99999 ? '全部范围' : `半径 ${currentRadius}km 内`;
-    document.getElementById('feedSubText').textContent = `${displayText} · 实时更新`;
+    let val = parseFloat(document.getElementById('rangeInput').value);
+    if (isNaN(val) || val <= 0) val = 3;
+    if (val > 1500) val = 1500;
+    currentRadius = val;
+    document.getElementById('rangeInput').value = val;
+    document.getElementById('feedSubText').textContent = `半径 ${val}km 内 · 实时更新`;
 
-    // 更新地图圆圈
+    // 更新地图圆圈和缩放
     if (map && userPosition) {
-        // 清除所有图层
+        // 清除旧的圆圈（保留底图和标记）
         map.eachLayer(function(layer) {
-            if (layer instanceof L.Circle) {
+            if (layer instanceof L.Circle && !(layer instanceof L.CircleMarker)) {
                 map.removeLayer(layer);
             }
         });
 
-        // 重新添加圆圈
-        if (currentRadius < 99999) {
-            L.circle([userPosition.lat, userPosition.lng], {
-                radius: currentRadius * 1000,
-                color: '#667eea',
-                fillColor: '#667eea',
-                fillOpacity: 0.1,
-                weight: 2
-            }).addTo(map);
-        }
+        // 添加新圆圈
+        L.circle([userPosition.lat, userPosition.lng], {
+            radius: currentRadius * 1000,
+            color: '#667eea',
+            fillColor: '#667eea',
+            fillOpacity: 0.1,
+            weight: 2
+        }).addTo(map);
+
+        // 自动缩放到合适级别
+        const zoom = radiusToZoom(currentRadius);
+        map.setView([userPosition.lat, userPosition.lng], zoom, { animate: true, duration: 0.5 });
     }
 
     filterAndRenderEvents();
+}
+
+function radiusToZoom(radiusKm) {
+    if (radiusKm <= 0.5) return 16;
+    if (radiusKm <= 1) return 15;
+    if (radiusKm <= 2) return 14;
+    if (radiusKm <= 3) return 13;
+    if (radiusKm <= 5) return 12;
+    if (radiusKm <= 10) return 11;
+    if (radiusKm <= 20) return 10;
+    if (radiusKm <= 50) return 9;
+    if (radiusKm <= 100) return 8;
+    if (radiusKm <= 300) return 7;
+    if (radiusKm <= 800) return 6;
+    return 5;
 }
 
 function subscribeEvents() {
