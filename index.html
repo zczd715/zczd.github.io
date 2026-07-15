@@ -1,0 +1,626 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>邻里圈 - 身边事 · 即时知</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f7fa; }
+
+        .container { max-width: 1200px; margin: 0 auto; background: #f5f7fa; min-height: 100vh; border-radius: 16px; overflow: hidden; box-shadow: 0 8px 32px rgba(0,0,0,0.12); }
+
+        /* 顶部导航 */
+        .header { display: flex; align-items: center; justify-content: space-between; padding: 14px 24px; background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); color: white; }
+        .header-left { display: flex; align-items: center; gap: 12px; }
+        .logo { width: 40px; height: 40px; background: linear-gradient(135deg, #667eea, #764ba2); border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 20px; box-shadow: 0 4px 12px rgba(102,126,234,0.4); }
+        .logo-text { font-weight: 700; font-size: 17px; letter-spacing: 0.5px; }
+        .logo-sub { font-size: 11px; color: #a0a8c0; margin-top: 1px; }
+        .header-right { display: flex; gap: 10px; align-items: center; }
+        .header-tag { padding: 6px 14px; background: rgba(255,255,255,0.08); border-radius: 20px; font-size: 13px; display: flex; align-items: center; gap: 6px; border: 1px solid rgba(255,255,255,0.1); }
+
+        /* 主体区域 */
+        .main { display: flex; height: calc(100vh - 68px); }
+
+        /* 地图区域 */
+        .map-area { flex: 1; position: relative; background: linear-gradient(160deg, #e8f4f8 0%, #d6e9f0 40%, #c5ddf0 100%); overflow: hidden; }
+        .map-svg { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
+
+        /* 标注点 */
+        .marker { position: absolute; cursor: pointer; transform: translate(-50%, -100%); z-index: 10; transition: transform 0.2s; }
+        .marker:hover { transform: translate(-50%, -110%) scale(1.05); }
+        .marker-label { padding: 5px 12px; border-radius: 20px; font-size: 12px; font-weight: 700; white-space: nowrap; box-shadow: 0 4px 12px rgba(0,0,0,0.15); display: flex; align-items: center; gap: 4px; }
+        .marker-arrow { width: 0; height: 0; border-left: 7px solid transparent; border-right: 7px solid transparent; margin: 0 auto; }
+
+        .marker-safety .marker-label { background: linear-gradient(135deg, #ff4757, #ff6b81); color: white; }
+        .marker-safety .marker-arrow { border-top: 9px solid #ff4757; }
+        .marker-lost .marker-label { background: linear-gradient(135deg, #ffa502, #ffc048); color: white; }
+        .marker-lost .marker-arrow { border-top: 9px solid #ffa502; }
+        .marker-trade .marker-label { background: linear-gradient(135deg, #2ed573, #7bed9f); color: white; }
+        .marker-trade .marker-arrow { border-top: 9px solid #2ed573; }
+        .marker-service .marker-label { background: linear-gradient(135deg, #1e90ff, #70a1ff); color: white; }
+        .marker-service .marker-arrow { border-top: 9px solid #1e90ff; }
+        .marker-event .marker-label { background: linear-gradient(135deg, #a55eea, #cf6af5); color: white; }
+        .marker-event .marker-arrow { border-top: 9px solid #a55eea; }
+
+        /* 用户位置 */
+        .user-location { position: absolute; left: 50%; top: 45%; z-index: 20; transform: translate(-50%, -50%); }
+        .user-dot { width: 18px; height: 18px; background: #1e90ff; border-radius: 50%; border: 3px solid white; box-shadow: 0 0 0 5px rgba(30,144,255,0.25); animation: pulse 2s infinite; }
+        .user-label { position: absolute; top: 22px; left: 50%; transform: translateX(-50%); background: #1e90ff; color: white; padding: 2px 8px; border-radius: 10px; font-size: 10px; white-space: nowrap; font-weight: 600; }
+        @keyframes pulse { 0%, 100% { box-shadow: 0 0 0 5px rgba(30,144,255,0.25); } 50% { box-shadow: 0 0 0 15px rgba(30,144,255,0.05); } }
+
+        /* 地图控件 */
+        .map-controls { position: absolute; bottom: 20px; right: 20px; display: flex; flex-direction: column; gap: 8px; z-index: 30; }
+        .map-btn { width: 38px; height: 38px; background: white; border-radius: 10px; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 10px rgba(0,0,0,0.12); cursor: pointer; font-size: 20px; color: #555; font-weight: 300; transition: transform 0.2s; border: none; }
+        .map-btn:hover { transform: scale(1.1); }
+
+        /* 图例 */
+        .map-legend { position: absolute; bottom: 20px; left: 20px; background: rgba(255,255,255,0.95); padding: 12px 16px; border-radius: 12px; box-shadow: 0 2px 12px rgba(0,0,0,0.08); font-size: 12px; z-index: 30; backdrop-filter: blur(8px); }
+        .legend-title { font-weight: 700; margin-bottom: 8px; color: #333; font-size: 13px; }
+        .legend-item { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+        .legend-dot { width: 10px; height: 10px; border-radius: 50%; }
+
+        /* 发布按钮 */
+        .publish-btn { position: absolute; top: 18px; right: 18px; background: linear-gradient(135deg, #667eea, #764ba2); color: white; padding: 11px 22px; border-radius: 25px; font-weight: 700; cursor: pointer; box-shadow: 0 6px 20px rgba(102,126,234,0.4); font-size: 14px; display: flex; align-items: center; gap: 6px; z-index: 30; border: none; transition: all 0.2s; }
+        .publish-btn:hover { transform: scale(1.05); box-shadow: 0 8px 25px rgba(102,126,234,0.5); }
+
+        /* 范围选择器 */
+        .range-selector { position: absolute; top: 18px; left: 18px; background: rgba(255,255,255,0.95); padding: 8px 14px; border-radius: 20px; box-shadow: 0 2px 10px rgba(0,0,0,0.08); font-size: 13px; color: #555; z-index: 30; display: flex; align-items: center; gap: 8px; backdrop-filter: blur(8px); }
+        .range-selector select { border: none; background: transparent; font-size: 13px; color: #333; outline: none; cursor: pointer; font-weight: 600; }
+
+        /* 右侧信息流 */
+        .sidebar { width: 320px; background: #ffffff; border-left: 1px solid #e8ecf1; display: flex; flex-direction: column; }
+        .sidebar-header { padding: 16px 20px; border-bottom: 1px solid #f0f2f5; background: linear-gradient(to right, #fafbfc, #ffffff); }
+        .sidebar-title { font-weight: 700; font-size: 16px; color: #1a1a2e; }
+        .sidebar-sub { font-size: 12px; color: #8898aa; margin-top: 4px; display: flex; align-items: center; gap: 6px; }
+        .live-dot { width: 6px; height: 6px; background: #2ed573; border-radius: 50%; display: inline-block; animation: blink 2s infinite; }
+        @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+
+        .feed { flex: 1; overflow-y: auto; padding: 14px; background: #f8f9fb; }
+        .feed::-webkit-scrollbar { width: 4px; }
+        .feed::-webkit-scrollbar-thumb { background: #d0d8e0; border-radius: 4px; }
+
+        .card { background: white; border-radius: 14px; padding: 16px; margin-bottom: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.04); cursor: pointer; transition: all 0.2s; border: 1.5px solid transparent; }
+        .card:hover { transform: translateY(-2px); box-shadow: 0 6px 16px rgba(0,0,0,0.08); }
+        .card-safety:hover { border-color: #ff4757; box-shadow: 0 6px 16px rgba(255,71,87,0.1); }
+        .card-trade:hover { border-color: #2ed573; box-shadow: 0 6px 16px rgba(46,213,115,0.1); }
+        .card-service:hover { border-color: #1e90ff; box-shadow: 0 6px 16px rgba(30,144,255,0.1); }
+        .card-lost:hover { border-color: #ffa502; box-shadow: 0 6px 16px rgba(255,165,2,0.1); }
+        .card-event:hover { border-color: #a55eea; box-shadow: 0 6px 16px rgba(165,94,234,0.1); }
+
+        .card-header { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+        .card-tag { padding: 3px 10px; border-radius: 12px; font-size: 11px; font-weight: 700; color: white; }
+        .tag-safety { background: linear-gradient(135deg, #ff4757, #ff6b81); }
+        .tag-trade { background: linear-gradient(135deg, #2ed573, #7bed9f); }
+        .tag-service { background: linear-gradient(135deg, #1e90ff, #70a1ff); }
+        .tag-lost { background: linear-gradient(135deg, #ffa502, #ffc048); }
+        .tag-event { background: linear-gradient(135deg, #a55eea, #cf6af5); }
+        .card-time { font-size: 12px; color: #a0aec0; }
+        .card-title { font-weight: 700; font-size: 14px; color: #2d3748; margin-bottom: 8px; line-height: 1.4; }
+        .card-desc { font-size: 13px; color: #718096; line-height: 1.6; }
+        .card-footer { display: flex; gap: 14px; margin-top: 12px; font-size: 12px; color: #a0aec0; }
+        .card-hot { color: #ff4757; font-weight: 600; }
+        .card-done { color: #1e90ff; font-weight: 600; }
+        .card-pin { color: #a55eea; font-weight: 600; }
+
+        .feed-end { text-align: center; padding: 16px; color: #a0aec0; font-size: 12px; }
+
+        /* 弹窗 */
+        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.45); z-index: 1000; align-items: center; justify-content: center; backdrop-filter: blur(4px); }
+        .modal.active { display: flex; }
+        .modal-box { background: white; border-radius: 20px; max-height: 85vh; overflow-y: auto; box-shadow: 0 25px 80px rgba(0,0,0,0.35); animation: slideUp 0.3s ease; }
+        .modal-header { padding: 24px; border-bottom: 1px solid #f0f2f5; display: flex; justify-content: space-between; align-items: center; background: linear-gradient(to right, #fafbfc, #ffffff); border-radius: 20px 20px 0 0; }
+        .modal-title { font-weight: 700; font-size: 18px; color: #1a1a2e; }
+        .modal-close { font-size: 26px; color: #a0aec0; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; border-radius: 50%; cursor: pointer; transition: all 0.2s; border: none; background: transparent; }
+        .modal-close:hover { background: #f0f2f5; color: #555; }
+        .modal-body { padding: 24px; }
+
+        @keyframes slideUp { from { transform: translateY(30px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+
+        /* 详情页样式 */
+        .detail-author { display: flex; align-items: center; gap: 14px; margin-bottom: 20px; }
+        .detail-avatar { width: 48px; height: 48px; background: linear-gradient(135deg, #f0f2f5, #e2e8f0); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 22px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+        .detail-name { font-weight: 700; color: #2d3748; font-size: 15px; }
+        .detail-meta { font-size: 12px; color: #a0aec0; margin-top: 3px; }
+        .detail-tag { padding: 5px 12px; border-radius: 12px; font-size: 12px; font-weight: 700; color: white; }
+        .detail-title { font-weight: 700; font-size: 19px; color: #1a1a2e; margin-bottom: 14px; line-height: 1.4; }
+        .detail-content { font-size: 15px; color: #4a5568; line-height: 1.8; margin-bottom: 18px; }
+        .detail-media { background: #f8f9fb; border-radius: 12px; padding: 14px; margin-bottom: 18px; font-size: 14px; color: #718096; display: flex; align-items: center; gap: 8px; border: 1px solid #f0f2f5; }
+        .detail-location { display: flex; align-items: center; gap: 10px; padding: 14px; background: #f0f5ff; border-radius: 12px; margin-bottom: 20px; border: 1.5px solid #d0e0ff; }
+        .detail-nav-btn { margin-left: auto; font-size: 13px; color: #667eea; cursor: pointer; font-weight: 600; padding: 6px 12px; background: white; border-radius: 8px; box-shadow: 0 1px 4px rgba(0,0,0,0.05); border: none; }
+        .detail-actions { display: flex; gap: 10px; margin-bottom: 24px; }
+        .detail-action-btn { flex: 1; padding: 12px; border: 1.5px solid #e2e8f0; background: white; border-radius: 12px; cursor: pointer; font-size: 13px; color: #718096; font-weight: 600; transition: all 0.2s; }
+        .detail-action-btn:hover { border-color: #667eea; }
+        .detail-comments { border-top: 1.5px solid #f0f2f5; padding-top: 20px; }
+        .detail-comments-title { font-weight: 700; font-size: 15px; color: #1a1a2e; margin-bottom: 16px; }
+        .comment { display: flex; gap: 12px; margin-bottom: 16px; }
+        .comment-avatar { width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 700; flex-shrink: 0; }
+        .comment-avatar.hot { background: linear-gradient(135deg, #667eea, #764ba2); color: white; }
+        .comment-avatar.normal { background: #f0f2f5; }
+        .comment-name { font-size: 14px; color: #2d3748; font-weight: 600; }
+        .comment-time { font-size: 11px; color: #a0aec0; }
+        .comment-text { font-size: 14px; color: #4a5568; line-height: 1.6; margin-top: 4px; }
+
+        /* 发布表单 */
+        .form-group { margin-bottom: 20px; }
+        .form-label { font-weight: 700; font-size: 14px; color: #2d3748; margin-bottom: 10px; display: block; }
+        .type-selector { display: flex; gap: 8px; flex-wrap: wrap; }
+        .type-option { padding: 8px 16px; border-radius: 20px; font-size: 13px; cursor: pointer; font-weight: 500; transition: all 0.2s; border: none; background: #f0f2f5; color: #718096; }
+        .type-option.active { color: white; box-shadow: 0 2px 8px rgba(0,0,0,0.15); }
+        .type-option.safety.active { background: linear-gradient(135deg, #ff4757, #ff6b81); }
+        .type-option.lost.active { background: linear-gradient(135deg, #ffa502, #ffc048); }
+        .type-option.trade.active { background: linear-gradient(135deg, #2ed573, #7bed9f); }
+        .type-option.service.active { background: linear-gradient(135deg, #1e90ff, #70a1ff); }
+        .type-option.event.active { background: linear-gradient(135deg, #a55eea, #cf6af5); }
+
+        .form-input { width: 100%; padding: 12px 16px; border: 1.5px solid #e2e8f0; border-radius: 12px; font-size: 14px; outline: none; transition: all 0.2s; }
+        .form-input:focus { border-color: #667eea; box-shadow: 0 0 0 3px rgba(102,126,234,0.1); }
+        .form-textarea { width: 100%; padding: 12px 16px; border: 1.5px solid #e2e8f0; border-radius: 12px; font-size: 14px; outline: none; resize: vertical; height: 90px; transition: all 0.2s; }
+        .form-textarea:focus { border-color: #667eea; box-shadow: 0 0 0 3px rgba(102,126,234,0.1); }
+        .upload-area { border: 2px dashed #e2e8f0; border-radius: 12px; padding: 28px; text-align: center; color: #a0aec0; cursor: pointer; transition: all 0.2s; }
+        .upload-area:hover { border-color: #667eea; background: #f8f9ff; }
+        .upload-icon { font-size: 36px; margin-bottom: 10px; }
+        .upload-text { font-size: 14px; font-weight: 500; }
+        .upload-hint { font-size: 12px; color: #cbd5e0; margin-top: 6px; }
+        .location-box { display: flex; align-items: center; gap: 10px; padding: 12px 16px; background: #f0f5ff; border-radius: 12px; border: 1.5px solid #d0e0ff; }
+        .location-edit { margin-left: auto; font-size: 13px; color: #667eea; cursor: pointer; font-weight: 600; }
+        .form-actions { display: flex; gap: 12px; }
+        .btn { flex: 1; padding: 14px; border-radius: 12px; font-size: 14px; cursor: pointer; font-weight: 600; transition: all 0.2s; border: none; }
+        .btn-cancel { border: 1.5px solid #e2e8f0; background: white; color: #718096; }
+        .btn-cancel:hover { border-color: #667eea; }
+        .btn-submit { background: linear-gradient(135deg, #667eea, #764ba2); color: white; box-shadow: 0 4px 15px rgba(102,126,234,0.35); }
+        .btn-submit:hover { transform: translateY(-1px); box-shadow: 0 6px 20px rgba(102,126,234,0.45); }
+
+        /* 功能开发中 */
+        .coming-soon { text-align: center; padding: 40px; }
+        .coming-soon-icon { font-size: 64px; margin-bottom: 16px; }
+        .coming-soon-title { font-weight: 700; font-size: 20px; color: #1a1a2e; margin-bottom: 12px; }
+        .coming-soon-desc { font-size: 14px; color: #718096; line-height: 1.7; margin-bottom: 24px; }
+        .coming-soon-input { width: 100%; padding: 12px 16px; border: 1.5px solid #e2e8f0; border-radius: 12px; font-size: 14px; outline: none; margin-bottom: 16px; text-align: center; }
+        .coming-soon-input:focus { border-color: #667eea; }
+
+        /* 响应式 */
+        @media (max-width: 768px) {
+            .main { flex-direction: column; }
+            .sidebar { width: 100%; height: 40%; border-left: none; border-top: 1px solid #e8ecf1; }
+            .map-area { height: 60%; }
+            .header { padding: 10px 16px; }
+            .header-tag { padding: 4px 10px; font-size: 12px; }
+            .publish-btn { padding: 9px 16px; font-size: 13px; }
+            .map-legend { display: none; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- 顶部导航 -->
+        <div class="header">
+            <div class="header-left">
+                <div class="logo">🗺️</div>
+                <div>
+                    <div class="logo-text">邻里圈</div>
+                    <div class="logo-sub">身边事 · 即时知 · 网页版Demo</div>
+                </div>
+            </div>
+            <div class="header-right">
+                <div class="header-tag">📍 北京 · 朝阳区</div>
+                <div class="header-tag">🔔 3</div>
+            </div>
+        </div>
+
+        <!-- 主体 -->
+        <div class="main">
+            <!-- 地图区 -->
+            <div class="map-area">
+                <svg class="map-svg" viewBox="0 0 600 540" preserveAspectRatio="xMidYMid slice">
+                    <defs>
+                        <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+                            <feDropShadow dx="0" dy="2" stdDeviation="3" flood-opacity="0.15"/>
+                        </filter>
+                    </defs>
+                    <!-- 主路 -->
+                    <line x1="0" y1="160" x2="600" y2="160" stroke="#ffffff" stroke-width="10" opacity="0.7"/>
+                    <line x1="0" y1="300" x2="600" y2="300" stroke="#ffffff" stroke-width="8" opacity="0.6"/>
+                    <line x1="0" y1="420" x2="600" y2="420" stroke="#ffffff" stroke-width="6" opacity="0.5"/>
+                    <line x1="180" y1="0" x2="180" y2="540" stroke="#ffffff" stroke-width="10" opacity="0.7"/>
+                    <line x1="380" y1="0" x2="380" y2="540" stroke="#ffffff" stroke-width="8" opacity="0.6"/>
+                    <line x1="520" y1="0" x2="520" y2="540" stroke="#ffffff" stroke-width="6" opacity="0.5"/>
+                    <!-- 辅路 -->
+                    <line x1="80" y1="0" x2="80" y2="540" stroke="#ffffff" stroke-width="3" opacity="0.3"/>
+                    <line x1="280" y1="0" x2="280" y2="540" stroke="#ffffff" stroke-width="3" opacity="0.3"/>
+                    <line x1="450" y1="0" x2="450" y2="540" stroke="#ffffff" stroke-width="3" opacity="0.3"/>
+                    <line x1="0" y1="80" x2="600" y2="80" stroke="#ffffff" stroke-width="3" opacity="0.3"/>
+                    <line x1="0" y1="230" x2="600" y2="230" stroke="#ffffff" stroke-width="3" opacity="0.3"/>
+                    <line x1="0" y1="360" x2="600" y2="360" stroke="#ffffff" stroke-width="3" opacity="0.3"/>
+                    <line x1="0" y1="480" x2="600" y2="480" stroke="#ffffff" stroke-width="3" opacity="0.3"/>
+                    <!-- 水域 -->
+                    <ellipse cx="500" cy="460" rx="70" ry="45" fill="#a8d8ea" opacity="0.5"/>
+                    <ellipse cx="530" cy="440" rx="30" ry="20" fill="#a8d8ea" opacity="0.4"/>
+                    <!-- 公园 -->
+                    <rect x="40" y="20" width="100" height="70" rx="15" fill="#b8e0a8" opacity="0.4"/>
+                    <rect x="300" y="380" width="60" height="60" rx="12" fill="#b8e0a8" opacity="0.4"/>
+                    <rect x="420" y="60" width="80" height="50" rx="10" fill="#b8e0a8" opacity="0.35"/>
+                    <!-- 建筑 -->
+                    <rect x="200" y="180" width="60" height="40" rx="4" fill="#d0d8e0" opacity="0.3"/>
+                    <rect x="280" y="100" width="50" height="35" rx="4" fill="#d0d8e0" opacity="0.3"/>
+                    <rect x="100" y="320" width="70" height="45" rx="4" fill="#d0d8e0" opacity="0.3"/>
+                    <rect x="400" y="240" width="55" height="40" rx="4" fill="#d0d8e0" opacity="0.3"/>
+                </svg>
+
+                <!-- 标注点 -->
+                <div class="marker marker-safety" style="left: 28%; top: 28%;" onclick="openDetail('accident')">
+                    <div class="marker-label"><span>⚠️</span> 交通事故</div>
+                    <div class="marker-arrow"></div>
+                </div>
+                <div class="marker marker-lost" style="left: 48%; top: 52%;" onclick="openDetail('pet')">
+                    <div class="marker-label"><span>🐕</span> 寻宠启事</div>
+                    <div class="marker-arrow"></div>
+                </div>
+                <div class="marker marker-trade" style="left: 18%; top: 62%;" onclick="openDetail('trade')">
+                    <div class="marker-label"><span>📦</span> 闲置转让</div>
+                    <div class="marker-arrow"></div>
+                </div>
+                <div class="marker marker-service" style="left: 68%; top: 36%;" onclick="openDetail('service')">
+                    <div class="marker-label"><span>🛠️</span> 跑腿代办</div>
+                    <div class="marker-arrow"></div>
+                </div>
+                <div class="marker marker-event" style="left: 42%; top: 18%;" onclick="openDetail('event')">
+                    <div class="marker-label"><span>🎉</span> 社区活动</div>
+                    <div class="marker-arrow"></div>
+                </div>
+
+                <!-- 用户位置 -->
+                <div class="user-location">
+                    <div class="user-dot"></div>
+                    <div class="user-label">你在这里</div>
+                </div>
+
+                <!-- 地图控件 -->
+                <div class="map-controls">
+                    <button class="map-btn">+</button>
+                    <button class="map-btn">−</button>
+                    <button class="map-btn" style="color: #1e90ff;">📍</button>
+                </div>
+
+                <!-- 图例 -->
+                <div class="map-legend">
+                    <div class="legend-title">事件类型</div>
+                    <div class="legend-item"><span class="legend-dot" style="background: linear-gradient(135deg, #ff4757, #ff6b81);"></span> <span style="color: #555;">安全事件</span></div>
+                    <div class="legend-item"><span class="legend-dot" style="background: linear-gradient(135deg, #ffa502, #ffc048);"></span> <span style="color: #555;">求助寻物</span></div>
+                    <div class="legend-item"><span class="legend-dot" style="background: linear-gradient(135deg, #2ed573, #7bed9f);"></span> <span style="color: #555;">闲置交易</span></div>
+                    <div class="legend-item"><span class="legend-dot" style="background: linear-gradient(135deg, #1e90ff, #70a1ff);"></span> <span style="color: #555;">代办服务</span></div>
+                    <div class="legend-item"><span class="legend-dot" style="background: linear-gradient(135deg, #a55eea, #cf6af5);"></span> <span style="color: #555;">社区活动</span></div>
+                </div>
+
+                <!-- 发布按钮 -->
+                <button class="publish-btn" onclick="openPublish()"><span style="font-size: 20px; font-weight: 300;">+</span> 发布事件</button>
+
+                <!-- 范围选择 -->
+                <div class="range-selector">
+                    <span style="font-size: 14px;">📍</span>
+                    <select>
+                        <option>附近 1km</option>
+                        <option>附近 3km</option>
+                        <option>附近 5km</option>
+                        <option>全区</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- 侧边栏信息流 -->
+            <div class="sidebar">
+                <div class="sidebar-header">
+                    <div class="sidebar-title">附近动态</div>
+                    <div class="sidebar-sub">
+                        <span class="live-dot"></span>
+                        半径 3km 内 · 实时更新
+                    </div>
+                </div>
+                <div class="feed">
+                    <div class="card card-safety" onclick="openDetail('accident')">
+                        <div class="card-header">
+                            <span class="card-tag tag-safety">安全</span>
+                            <span class="card-time">2分钟前 · 1.2km</span>
+                        </div>
+                        <div class="card-title">⚠️ 建国路路口发生车辆剐蹭</div>
+                        <div class="card-desc">双向车道轻微拥堵，交警已到现场处理，请过往车辆注意避让...</div>
+                        <div class="card-footer">
+                            <span>👁 234</span>
+                            <span>💬 18</span>
+                            <span class="card-hot">🔥 热</span>
+                        </div>
+                    </div>
+
+                    <div class="card card-trade" onclick="openDetail('trade')">
+                        <div class="card-header">
+                            <span class="card-tag tag-trade">交易</span>
+                            <span class="card-time">15分钟前 · 0.8km</span>
+                        </div>
+                        <div class="card-title">📦 转让宜家书桌，9成新</div>
+                        <div class="card-desc">搬家带不走，原价899现200出，自提。尺寸120×60cm...</div>
+                        <div class="card-footer">
+                            <span>👁 89</span>
+                            <span>💬 5</span>
+                            <span>❤️ 12</span>
+                        </div>
+                    </div>
+
+                    <div class="card card-service" onclick="openDetail('service')">
+                        <div class="card-header">
+                            <span class="card-tag tag-service">代办</span>
+                            <span class="card-time">32分钟前 · 2.1km</span>
+                        </div>
+                        <div class="card-title">🛠️ 帮忙排队取号，酬劳50元</div>
+                        <div class="card-desc">明天上午医院挂号，需要有人7点到现场排队，酬劳50元+报销路费...</div>
+                        <div class="card-footer">
+                            <span>👁 156</span>
+                            <span>💬 23</span>
+                            <span class="card-done">✅ 已接单</span>
+                        </div>
+                    </div>
+
+                    <div class="card card-lost" onclick="openDetail('pet')">
+                        <div class="card-header">
+                            <span class="card-tag tag-lost">寻物</span>
+                            <span class="card-time">1小时前 · 1.5km</span>
+                        </div>
+                        <div class="card-title">🐕 金毛犬走失，酬谢1000元</div>
+                        <div class="card-desc">名字叫豆豆，戴红色项圈，昨天下午在朝阳公园附近走失...</div>
+                        <div class="card-footer">
+                            <span>👁 412</span>
+                            <span>💬 34</span>
+                            <span>🔄 转发 89</span>
+                        </div>
+                    </div>
+
+                    <div class="card card-event" onclick="openDetail('event')">
+                        <div class="card-header">
+                            <span class="card-tag tag-event">活动</span>
+                            <span class="card-time">3小时前 · 0.5km</span>
+                        </div>
+                        <div class="card-title">🎉 周末社区跳蚤市场</div>
+                        <div class="card-desc">本周六上午9:00-12:00，小区中心广场举办跳蚤市场，欢迎居民摆摊...</div>
+                        <div class="card-footer">
+                            <span>👁 567</span>
+                            <span>💬 45</span>
+                            <span class="card-pin">📌 置顶</span>
+                        </div>
+                    </div>
+
+                    <div class="feed-end">已经到底了 👇</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 详情弹窗 -->
+    <div class="modal" id="detailModal" onclick="if(event.target===this)closeDetail()">
+        <div class="modal-box" style="width: 500px;">
+            <div class="modal-header">
+                <div class="modal-title">事件详情</div>
+                <button class="modal-close" onclick="closeDetail()">×</button>
+            </div>
+            <div class="modal-body" id="detailContent"></div>
+        </div>
+    </div>
+
+    <!-- 发布弹窗 -->
+    <div class="modal" id="publishModal" onclick="if(event.target===this)closePublish()">
+        <div class="modal-box" style="width: 460px;">
+            <div class="modal-header">
+                <div class="modal-title">发布新事件</div>
+                <button class="modal-close" onclick="closePublish()">×</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label class="form-label">事件类型</label>
+                    <div class="type-selector">
+                        <button class="type-option safety active" onclick="selectType(this, 'safety')">⚠️ 安全事件</button>
+                        <button class="type-option lost" onclick="selectType(this, 'lost')">🐕 寻物启事</button>
+                        <button class="type-option trade" onclick="selectType(this, 'trade')">📦 闲置转让</button>
+                        <button class="type-option service" onclick="selectType(this, 'service')">🛠️ 代办服务</button>
+                        <button class="type-option event" onclick="selectType(this, 'event')">🎉 社区活动</button>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">标题</label>
+                    <input type="text" class="form-input" placeholder="简短描述事件...">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">详细描述</label>
+                    <textarea class="form-textarea" placeholder="补充时间、地点、联系方式等详细信息..."></textarea>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">添加图片</label>
+                    <div class="upload-area">
+                        <div class="upload-icon">📷</div>
+                        <div class="upload-text">点击上传或拖拽文件到此处</div>
+                        <div class="upload-hint">支持 JPG, PNG (最大 10MB)</div>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">定位</label>
+                    <div class="location-box">
+                        <span style="font-size: 18px;">📍</span>
+                        <span style="font-size: 14px; color: #2d3748; font-weight: 500;">北京市朝阳区建国路88号 (当前位置)</span>
+                        <span class="location-edit">修改</span>
+                    </div>
+                </div>
+                <div class="form-actions">
+                    <button class="btn btn-cancel" onclick="closePublish()">取消</button>
+                    <button class="btn btn-submit" onclick="showComingSoon()">发布</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 功能开发中弹窗 -->
+    <div class="modal" id="comingSoonModal" onclick="if(event.target===this)closeComingSoon()">
+        <div class="modal-box" style="width: 380px;">
+            <div class="coming-soon">
+                <div class="coming-soon-icon">🚧</div>
+                <div class="coming-soon-title">功能开发中</div>
+                <div class="coming-soon-desc">发布功能正在紧锣密鼓开发中！<br>留下你的邮箱，上线后第一时间通知你 📧</div>
+                <input type="email" class="coming-soon-input" placeholder="your@email.com">
+                <button class="btn btn-submit" style="width: 100%;" onclick="closeComingSoon()">提交</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const detailData = {
+            accident: {
+                title: '⚠️ 建国路路口发生车辆剐蹭',
+                type: '安全事件',
+                typeBg: 'linear-gradient(135deg, #ff4757, #ff6b81)',
+                time: '2分钟前',
+                distance: '1.2km',
+                author: '路人甲',
+                avatar: '👤',
+                content: '双向车道轻微拥堵，交警已到现场处理，请过往车辆注意避让。现场有两辆轿车发生剐蹭，无人员伤亡。建议绕行至朝阳北路。',
+                views: 234,
+                comments: 18,
+                media: '📹 视频 (12秒)',
+                location: '建国路与朝阳路交叉口'
+            },
+            pet: {
+                title: '🐕 金毛犬走失，酬谢1000元',
+                type: '寻物启事',
+                typeBg: 'linear-gradient(135deg, #ffa502, #ffc048)',
+                time: '1小时前',
+                distance: '1.5km',
+                author: '爱狗人士',
+                avatar: '👤',
+                content: '名字叫豆豆，戴红色项圈，昨天下午在朝阳公园附近走失。如有发现请联系我，酬谢1000元！电话：138****5678',
+                views: 412,
+                comments: 34,
+                media: '📷 照片 (3张)',
+                location: '朝阳公园南门附近'
+            },
+            trade: {
+                title: '📦 转让宜家书桌，9成新',
+                type: '闲置交易',
+                typeBg: 'linear-gradient(135deg, #2ed573, #7bed9f)',
+                time: '15分钟前',
+                distance: '0.8km',
+                author: '搬家党',
+                avatar: '👤',
+                content: '搬家带不走，原价899现200出，自提。尺寸120×60cm，白色，使用半年，无明显划痕。地址：朝阳区SOHO现代城。',
+                views: 89,
+                comments: 5,
+                media: '📷 照片 (5张)',
+                location: 'SOHO现代城D座'
+            },
+            service: {
+                title: '🛠️ 帮忙排队取号，酬劳50元',
+                type: '代办服务',
+                typeBg: 'linear-gradient(135deg, #1e90ff, #70a1ff)',
+                time: '32分钟前',
+                distance: '2.1km',
+                author: '上班族',
+                avatar: '👤',
+                content: '明天上午医院挂号，需要有人7点到现场排队，酬劳50元+报销路费。医院：朝阳医院，科室：骨科。有意者私信联系。',
+                views: 156,
+                comments: 23,
+                media: '',
+                location: '首都医科大学附属北京朝阳医院'
+            },
+            event: {
+                title: '🎉 周末社区跳蚤市场',
+                type: '社区活动',
+                typeBg: 'linear-gradient(135deg, #a55eea, #cf6af5)',
+                time: '3小时前',
+                distance: '0.5km',
+                author: '居委会小王',
+                avatar: '👤',
+                content: '本周六上午9:00-12:00，小区中心广场举办跳蚤市场，欢迎居民摆摊交换闲置物品。免费提供摊位，需提前报名。',
+                views: 567,
+                comments: 45,
+                media: '📷 活动海报',
+                location: 'XX小区中心广场'
+            }
+        };
+
+        function openDetail(type) {
+            const data = detailData[type];
+            const modal = document.getElementById('detailModal');
+            const content = document.getElementById('detailContent');
+
+            content.innerHTML = `
+                <div class="detail-author">
+                    <div class="detail-avatar">${data.avatar}</div>
+                    <div style="flex: 1;">
+                        <div class="detail-name">${data.author}</div>
+                        <div class="detail-meta">${data.time} · ${data.distance}</div>
+                    </div>
+                    <span class="detail-tag" style="background: ${data.typeBg};">${data.type}</span>
+                </div>
+                <div class="detail-title">${data.title}</div>
+                <div class="detail-content">${data.content}</div>
+                ${data.media ? `<div class="detail-media"><span style="font-size: 18px;">🖼️</span> ${data.media}</div>` : ''}
+                <div class="detail-location">
+                    <span style="font-size: 20px;">📍</span>
+                    <span style="font-size: 14px; color: #2d3748; font-weight: 500; flex: 1;">${data.location}</span>
+                    <button class="detail-nav-btn">导航前往</button>
+                </div>
+                <div class="detail-actions">
+                    <button class="detail-action-btn">👁 ${data.views} 浏览</button>
+                    <button class="detail-action-btn">💬 ${data.comments} 评论</button>
+                    <button class="detail-action-btn">🔄 转发</button>
+                </div>
+                <div class="detail-comments">
+                    <div class="detail-comments-title">评论区 (${data.comments})</div>
+                    <div class="comment">
+                        <div class="comment-avatar hot">热</div>
+                        <div style="flex: 1;">
+                            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
+                                <span class="comment-name">热心市民</span>
+                                <span class="comment-time">5分钟前</span>
+                            </div>
+                            <div class="comment-text">刚路过，交警已经疏导完了，可以正常通行了。建议大家走朝阳北路绕行。</div>
+                        </div>
+                    </div>
+                    <div class="comment">
+                        <div class="comment-avatar normal">👤</div>
+                        <div style="flex: 1;">
+                            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
+                                <span class="comment-name">附近居民</span>
+                                <span class="comment-time">8分钟前</span>
+                            </div>
+                            <div class="comment-text">感谢提醒，我正好要出门，避开了拥堵。</div>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            modal.classList.add('active');
+        }
+
+        function closeDetail() {
+            document.getElementById('detailModal').classList.remove('active');
+        }
+
+        function openPublish() {
+            document.getElementById('publishModal').classList.add('active');
+        }
+
+        function closePublish() {
+            document.getElementById('publishModal').classList.remove('active');
+        }
+
+        function selectType(el, type) {
+            document.querySelectorAll('.type-option').forEach(btn => btn.classList.remove('active'));
+            el.classList.add('active');
+        }
+
+        function showComingSoon() {
+            closePublish();
+            document.getElementById('comingSoonModal').classList.add('active');
+        }
+
+        function closeComingSoon() {
+            document.getElementById('comingSoonModal').classList.remove('active');
+        }
+    </script>
+</body>
+</html>
