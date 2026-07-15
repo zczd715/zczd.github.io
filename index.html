@@ -326,9 +326,11 @@
                     <option value="3" selected>附近 3km</option>
                     <option value="5">附近 5km</option>
                     <option value="10">附近 10km</option>
+                    <option value="50">附近 50km</option>
+                    <option value="99999">显示全部</option>
                 </select>
             </div>
-            <button class="publish-float-btn" id="publishFloatBtn" onclick="openPublishModal()">
+            <button class="publish-float-btn" id="publishFloatBtn" onclick="openPublishModal()" style="top: auto; bottom: 80px; left: 16px; right: auto; z-index: 1000;">
                 <span style="font-size: 20px; font-weight: 300;">+</span> 发布事件
             </button>
             <button class="map-float-btn locate-btn" onclick="locateUser()" title="定位到我的位置">📍</button>
@@ -940,12 +942,28 @@ function shareEvent(id) {
 
 function onRangeChange() {
     currentRadius = parseInt(document.getElementById('rangeSelect').value);
-    document.getElementById('feedSubText').textContent = `半径 ${currentRadius}km 内 · 实时更新`;
+    const displayText = currentRadius >= 99999 ? '全部范围' : `半径 ${currentRadius}km 内`;
+    document.getElementById('feedSubText').textContent = `${displayText} · 实时更新`;
 
     // 更新地图圆圈
     if (map && userPosition) {
-        map.clearMap();
-        initMap(); // 重新初始化以更新圆圈
+        // 清除所有图层
+        map.eachLayer(function(layer) {
+            if (layer instanceof L.Circle) {
+                map.removeLayer(layer);
+            }
+        });
+
+        // 重新添加圆圈
+        if (currentRadius < 99999) {
+            L.circle([userPosition.lat, userPosition.lng], {
+                radius: currentRadius * 1000,
+                color: '#667eea',
+                fillColor: '#667eea',
+                fillOpacity: 0.1,
+                weight: 2
+            }).addTo(map);
+        }
     }
 
     filterAndRenderEvents();
