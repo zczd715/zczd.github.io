@@ -506,6 +506,23 @@ let selectedType = 'safety';
 let selectedFiles = [];
 let allEvents = [];
 let markers = [];
+// 兼容 images 字段可能是 text 字符串或数组的情况
+function safeImages(images) {
+    if (!images) return [];
+    if (Array.isArray(images)) return images;
+    if (typeof images === 'string') {
+        try {
+            const parsed = JSON.parse(images);
+            if (Array.isArray(parsed)) return parsed;
+            return [images];
+        } catch (e) {
+            if (images.includes(',')) return images.split(',').map(s => s.trim()).filter(Boolean);
+            return [images];
+        }
+    }
+    return [];
+}
+
 let currentRadius = 3;
 
 const TYPE_CONFIG = {
@@ -821,8 +838,9 @@ function renderFeed(events) {
         const cfg = TYPE_CONFIG[event.type] || TYPE_CONFIG.safety;
         const timeStr = formatTime(event.created_at);
         const distStr = event._distance ? event._distance.toFixed(1) + 'km' : '未知距离';
-        const imagesHtml = (event.images && event.images.length > 0) 
-            ? `<div class="card-images">${event.images.slice(0,3).map(url => `<img class="card-img-thumb" src="${url}" loading="lazy">`).join('')}</div>` 
+        const imgList = safeImages(event.images);
+        const imagesHtml = imgList.length > 0 
+            ? `<div class="card-images">${imgList.slice(0,3).map(url => `<img class="card-img-thumb" src="${url}" loading="lazy">`).join('')}</div>` 
             : '';
 
         return `
@@ -853,8 +871,9 @@ function openDetail(event) {
     const timeStr = formatTime(event.created_at);
     const distStr = event._distance ? event._distance.toFixed(1) + 'km' : '未知距离';
 
-    const imagesHtml = (event.images && event.images.length > 0)
-        ? `<div class="detail-images">${event.images.map(url => `<img src="${url}" onclick="window.open('${url}')">`).join('')}</div>`
+    const imgList = safeImages(event.images);
+    const imagesHtml = imgList.length > 0
+        ? `<div class="detail-images">${imgList.map(url => `<img src="${url}" onclick="window.open('${url}')">`).join('')}</div>`
         : '';
 
     document.getElementById('detailContent').innerHTML = `
@@ -1061,7 +1080,7 @@ async function handlePublish() {
             type: selectedType,
             title: title,
             content: content,
-            images: imageUrls,
+            images: JSON.stringify(imageUrls), // 兼容 text 类型，存 JSON 字符串
             lat: userPosition.lat,
             lng: userPosition.lng,
             address: '当前位置附近',
