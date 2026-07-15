@@ -539,9 +539,10 @@ const TYPE_CONFIG = {
 
 async function init() {
     // 检查配置
-    if (CONFIG.SUPABASE_URL.includes('你的') || CONFIG.AMAP_KEY.includes('你的')) {
+    const supabaseConfigured = CONFIG.SUPABASE_URL && !CONFIG.SUPABASE_URL.includes('你的');
+    if (!supabaseConfigured) {
         showToast('请先修改代码中的 CONFIG 配置项！', 'error');
-        document.querySelector('.loading-sub').textContent = '请配置 Supabase 和高德地图密钥';
+        document.querySelector('.loading-sub').textContent = '请配置 Supabase 密钥';
         return;
     }
 
